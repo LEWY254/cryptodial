@@ -1,0 +1,26 @@
+{
+  "name": "node-express-api-ts",
+  "description": "Simple API sample in Node",
+  "version": "1.0.0",
+  "private": true,
+  "main": "index.js",
+  "scripts": {
+    "dev": "nodemon --watch 'src/**' --ext 'ts,json' --exec 'pnpm build && pnpm start'",
+    "build": "tsc",
+    "start": "node dist/index.js"
+  },
+  "author": "Lewis Ogamba",
+  "license": "Apache-2.0",
+  "dependencies": {
+    "dotenv": "^16.4.7",
+    "ethers": "^6.13.5",
+    "express": "^4.21.2",
+    "pnpm": "^10.6.2"
+  },
+  "devDependencies": {
+    "@types/node": "^20.12.12",
+    "nodemon": "^3.1.0",
+    "typescript": "^5.4.5"
+  },
+  "packageManager": "pnpm@8.0.0"
+}
