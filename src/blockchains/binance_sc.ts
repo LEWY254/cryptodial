@@ -1,5 +1,5 @@
 import Web3 from 'web3';
-import { TransactionConfig } from 'web3-core';
+import {basechain} from "./basechain"
 
 export class BinanceSmartChain implements basechain {
   provider_url: string;
@@ -17,7 +17,7 @@ export class BinanceSmartChain implements basechain {
   ): Promise<Record<string, any>> {
     const { address, privateKey } = sender_wallet;
     const nonce = await this.web3.eth.getTransactionCount(address, 'latest');
-    const tx: TransactionConfig = {
+    const tx: Record<string,any> = {
       from: address,
       to: to,
       value: this.web3.utils.toWei(amount.toString(), 'ether'),
