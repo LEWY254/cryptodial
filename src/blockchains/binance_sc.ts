@@ -58,7 +58,8 @@ export class BinanceSmartChain implements basechain {
     return {
       public_address: account.address,
       private_key: account.privateKey,
-      mnemonic: [], // BSC doesn't natively use mnemonics in web3.js
+      mnemonic: [], 
+      // BSC doesn't natively use mnemonics in web3.js, ill think of a workaround one day. Maybe
     };
   }
 

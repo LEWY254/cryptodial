@@ -2,7 +2,7 @@ import { basechain } from "../blockchains/basechain";
 import { etnchain } from "../blockchains/evm_chains";
 import { PolygonChain } from "../blockchains/polygon";
 import { SolanaChain } from "../blockchains/solana";
-import { BinanceChain } from "../blockchains/binance_sc";
+import { BinanceSmartChain } from "../blockchains/binance_sc";
 
 enum provider_identifier {
     evm = "evm",
@@ -20,7 +20,7 @@ async function resolver(identifier: provider_identifier): Promise<basechain> {
         case provider_identifier.solana:
             return new SolanaChain("https://api.mainnet-beta.solana.com");
         case provider_identifier.binance:
-            return new BinanceChain("https://bsc-dataseed.binance.org/");
+            return new BinanceSmartChain("https://bsc-dataseed.binance.org/");
         default:
             throw new Error(`Unsupported provider identifier: ${identifier}`);
     }
