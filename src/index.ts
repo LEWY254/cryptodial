@@ -342,10 +342,157 @@ menu.state('executeSend', {
 
       const { recipient, amount } = JSON.parse(session.tempData);
       
-      // Get sender details
+      // Get sender details with validation
       const [sender] = await db.findDocuments('records', 'users', { walletId: session.walletId });
       if (!sender) {
         return 'Wallet not found.';
       }
 
-      // Decrypt private key 
+      // Secure private key decryption
+      let privateKey: string;
+      try {
+        privateKey = decryptKey(sender.encryptedKey, session.tempPin);
+        if (!privateKey || privateKey.length < 64) {
+          throw new Error('Invalid key decryption');
+        }
+      } catch (decryptError) {
+        console.error('Decryption failed:', decryptError);
+        // Security: Clear sensitive data from session
+        updateSession(menu.session.id, { tempPin: null });
+        return 'Security verification failed. Please restart.';
+      }
+
+      // Get recipient with validation
+      const [receiver] = await db.findDocuments('records', 'users', { walletId: recipient });
+      if (!receiver) {
+        return 'Recipient wallet not found.';
+      }
+
+      // Validate amount
+      if (isNaN(amount) || amount <= 0) {
+        return 'Invalid amount specified.';
+      }
+
+      // Get blockchain instance with error handling
+      let chain: basechain;
+      try {
+        chain = resolver(sender.blockchain as provider_identifier);
+      } catch (chainError) {
+        console.error('Blockchain resolver failed:', chainError);
+        return 'Network error. Please try again later.';
+      }
+
+      // Execute transaction with comprehensive error handling
+      let txReceipt: Record<string, any>;
+      try {
+        txReceipt = await chain.SendCrypto(
+          { address: sender.walletId, privateKey },
+          receiver.walletId,
+          amount
+        );
+
+        if (!txReceipt?.transactionHash) {
+          throw new Error('No transaction hash received');
+        }
+      } catch (txError) {
+        console.error('Transaction failed:', txError);
+        
+        // Record failed transaction
+        await db.insertDocument('records', 'transactions', {
+          senderWalletId: session.walletId,
+          recipientWalletId: recipient,
+          amount,
+          currency: sender.blockchain,
+          status: 'failed',
+          error: txError instanceof Error ? txError.message : 'Unknown error',
+          createdAt: new Date()
+        });
+
+        return `Transaction failed: ${txError instanceof Error ? txError.message : 'Please try again'}`;
+      }
+
+      // Record successful transaction
+      await db.insertDocument('records', 'transactions', {
+        senderWalletId: session.walletId,
+        recipientWalletId: recipient,
+        amount,
+        currency: sender.blockchain,
+        txHash: txReceipt.transactionHash,
+        status: 'completed',
+        networkFee: txReceipt.gasUsed ? String(txReceipt.gasUsed) : undefined,
+        blockNumber: txReceipt.blockNumber,
+        createdAt: new Date()
+      });
+
+      // Send confirmation SMS with error handling
+      try {
+        await at.sendSms({
+          to: menu.args.phoneNumber,
+          message: `Cryptodial Transaction\nSent: ${amount} ${sender.blockchain}\nTo: ${recipient}\nTxnID: ${txReceipt.transactionHash.slice(0, 12)}...\n\nView: ${getExplorerLink(sender.blockchain, txReceipt.transactionHash)}`
+        });
+      } catch (smsError) {
+        console.error('SMS notification failed:', smsError);
+        // Continue even if SMS fails
+      }
+
+      // Clear sensitive data from session
+      updateSession(menu.session.id, { 
+        tempPin: null,
+        tempData: null
+      });
+
+      return `Transaction successful!\n\nTxnID: ${txReceipt.transactionHash.slice(0, 12)}...\n\n1. New Transaction\n0. Main Menu`;
+    } catch (error) {
+      console.error('Unexpected error in executeSend:', error);
+      return 'System error. Please try again.';
+    }
+  },
+  next: {
+    '1': 'sendCrypto',
+    '0': '__start__'
+  }
+});
+
+// Helper function to get blockchain explorer link
+function getExplorerLink(blockchain: string, txHash: string): string {
+  const explorers = {
+    etn: 'https://etnscan.com/tx/',
+    eth: 'https://etherscan.io/tx/',
+    bsc: 'https://bscscan.com/tx/',
+    polygon: 'https://polygonscan.com/tx/'
+  };
+  return `${explorers[blockchain as keyof typeof explorers] || 'https://explorer.example.com/tx/'}${txHash}`;
+}
+
+// Session cleanup on server start
+function initializeSessionCleanup() {
+  // Cleanup every 5 minutes
+  setInterval(() => {
+    const cutoff = Date.now() - 300000; // 5 minutes
+    sqlite.prepare('DELETE FROM sessions WHERE expiresAt < ?').run(cutoff);
+    console.log('Cleaned up expired sessions');
+  }, 300000);
+  
+  // Immediate cleanup on startup
+  sqlite.prepare('DELETE FROM sessions WHERE expiresAt < ?').run(Date.now());
+}
+
+// Start the server with error handling
+function startServer() {
+  const PORT = process.env.PORT || 3000;
+  
+  db.connect().then(() => {
+    console.log('✅ MongoDB connected successfully');
+    
+    app.listen(PORT, () => {
+      console.log(`🔄 USSD server running on port ${PORT}`);
+      initializeSessionCleanup();
+    });
+  }).catch(err => {
+    console.error('❌ Failed to connect to MongoDB:', err);
+    process.exit(1);
+  });
+}
+
+// Start the application
+startServer();
